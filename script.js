@@ -703,7 +703,7 @@ async function initApp() {
   } catch (err) {
     console.error("Error al inicializar la aplicación:", err);
     document.body.innerHTML =
-      '<div style="color:red;text-align:center;padding:50px;font-size:24px;">Error al cargar la experiencia. Puedes recargar la página o avisarle a Jarek 💙</div>';
+      '<div style="color:red;text-align:center;padding:50px;font-size:24px;">Error al cargar la experiencia. Puedes recargar la página o avisarle a Rodrigo 💙</div>';
   }
 }
 
