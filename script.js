@@ -157,23 +157,48 @@ function startLoader() {
 
 async function loadThreeResources() {
   const textureLoader = new THREE.TextureLoader();
-  const fontLoader = new THREE.FontLoader();
-
-  // Texturas
+  
+  // Texturas - cargar con manejo de errores individual
   for (const url of IMAGE_URLS) {
-    const tex = await textureLoader.loadAsync(url);
-    stickerTextures.push(tex);
+    try {
+      const tex = await textureLoader.loadAsync(url);
+      stickerTextures.push(tex);
+    } catch (err) {
+      console.warn(`No se pudo cargar textura: ${url}`, err);
+      // Crear textura de placeholder
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#00eeff';
+      ctx.fillRect(0, 0, 512, 512);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '40px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('💙', 256, 256);
+      const placeholderTex = new THREE.CanvasTexture(canvas);
+      stickerTextures.push(placeholderTex);
+    }
   }
 
-  // Fuente
-  font = await new Promise((resolve) => {
-    fontLoader.load(
-      "https://threejs.org/examples/fonts/gentilis_regular.typeface.json",
-      (loadedFont) => resolve(loadedFont),
-      undefined,
-      () => resolve(null) // si falla, seguimos sin fuente
-    );
-  });
+  // Fuente - verificar que FontLoader exista
+  if (typeof THREE.FontLoader !== 'undefined') {
+    const fontLoader = new THREE.FontLoader();
+    font = await new Promise((resolve) => {
+      fontLoader.load(
+        "https://threejs.org/examples/fonts/gentilis_regular.typeface.json",
+        (loadedFont) => resolve(loadedFont),
+        undefined,
+        (err) => {
+          console.warn('No se pudo cargar la fuente, continuando sin texto 3D', err);
+          resolve(null);
+        }
+      );
+    });
+  } else {
+    console.warn('FontLoader no disponible, continuando sin texto 3D');
+    font = null;
+  }
 }
 
 // ======================================================
@@ -212,12 +237,19 @@ function createRenderer() {
     .getElementById("contenedor-escena")
     .appendChild(renderer.domElement);
 
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.enableZoom = true;
-  controls.autoRotate = false;
-  controls.autoRotateSpeed = 0.5;
+  // Verificar que OrbitControls esté disponible
+  if (typeof THREE.OrbitControls !== 'undefined') {
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enableZoom = true;
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 0.5;
+  } else {
+    console.warn('OrbitControls no disponible, continuando sin controles');
+    // Crear un objeto dummy para controls.update()
+    controls = { update: () => {} };
+  }
 
   window.addEventListener("resize", onResize);
 }
@@ -298,8 +330,12 @@ function createRingsAndText() {
   ringOuter.rotation.x = Math.PI / 2 + 0.1;
   scene.add(ringOuter);
 
-  // Texto en círculo (si hay fuente)
-  if (!font) return;
+  // Texto en círculo (si hay fuente y TextGeometry disponible)
+  if (!font || typeof THREE.TextGeometry === 'undefined') {
+    if (!font) console.log('Texto 3D no disponible: fuente no cargada');
+    if (typeof THREE.TextGeometry === 'undefined') console.log('Texto 3D no disponible: TextGeometry no cargado');
+    return;
+  }
 
   const radius = 7;
   const chars = RING_TEXT.length;
@@ -309,39 +345,43 @@ function createRingsAndText() {
     const ch = RING_TEXT[i];
     if (ch === " ") continue;
 
-    const geo = new THREE.TextGeometry(ch, {
-      font,
-      size: 0.4,
-      height: 0.05,
-      curveSegments: 12,
-      bevelEnabled: true,
-      bevelThickness: 0.01,
-      bevelSize: 0.02,
-      bevelSegments: 3
-    });
-    geo.computeBoundingBox();
-    geo.center();
+    try {
+      const geo = new THREE.TextGeometry(ch, {
+        font,
+        size: 0.4,
+        height: 0.05,
+        curveSegments: 12,
+        bevelEnabled: true,
+        bevelThickness: 0.01,
+        bevelSize: 0.02,
+        bevelSegments: 3
+      });
+      geo.computeBoundingBox();
+      geo.center();
 
-    const mat = new THREE.MeshPhongMaterial({
-      color: 0x00eeff,
-      emissive: 0x003366,
-      specular: 0x88bbff,
-      shininess: 80,
-      transparent: true,
-      opacity: 0.9
-    });
+      const mat = new THREE.MeshPhongMaterial({
+        color: 0x00eeff,
+        emissive: 0x003366,
+        specular: 0x88bbff,
+        shininess: 80,
+        transparent: true,
+        opacity: 0.9
+      });
 
-    const mesh = new THREE.Mesh(geo, mat);
-    const angle = -i * step;
+      const mesh = new THREE.Mesh(geo, mat);
+      const angle = -i * step;
 
-    mesh.position.x = Math.cos(angle) * radius;
-    mesh.position.z = Math.sin(angle) * radius;
-    mesh.position.y = 0;
-    mesh.rotation.y = angle + Math.PI;
-    mesh.rotation.x = Math.PI / 2;
+      mesh.position.x = Math.cos(angle) * radius;
+      mesh.position.z = Math.sin(angle) * radius;
+      mesh.position.y = 0;
+      mesh.rotation.y = angle + Math.PI;
+      mesh.rotation.x = Math.PI / 2;
 
-    scene.add(mesh);
-    ringTexts.push(mesh);
+      scene.add(mesh);
+      ringTexts.push(mesh);
+    } catch (err) {
+      console.warn(`Error creando texto 3D para caracter: ${ch}`, err);
+    }
   }
 }
 
@@ -350,50 +390,57 @@ function createRingsAndText() {
 // ======================================================
 
 function createFloatingWords() {
-  if (!font) return;
+  if (!font || typeof THREE.TextGeometry === 'undefined') {
+    console.log('Palabras flotantes no disponibles: fuente o TextGeometry no cargados');
+    return;
+  }
 
   FLOATING_WORDS.forEach((word, idx) => {
-    const geo = new THREE.TextGeometry(word, {
-      font,
-      size: 0.5,
-      height: 0.08,
-      curveSegments: 8,
-      bevelEnabled: true,
-      bevelThickness: 0.02,
-      bevelSize: 0.03,
-      bevelSegments: 3
-    });
-    geo.computeBoundingBox();
-    geo.center();
+    try {
+      const geo = new THREE.TextGeometry(word, {
+        font,
+        size: 0.5,
+        height: 0.08,
+        curveSegments: 8,
+        bevelEnabled: true,
+        bevelThickness: 0.02,
+        bevelSize: 0.03,
+        bevelSegments: 3
+      });
+      geo.computeBoundingBox();
+      geo.center();
 
-    const mat = new THREE.MeshPhongMaterial({
-      color: 0x00eeff,
-      emissive: 0x004477,
-      transparent: true,
-      opacity: 0.9
-    });
+      const mat = new THREE.MeshPhongMaterial({
+        color: 0x00eeff,
+        emissive: 0x004477,
+        transparent: true,
+        opacity: 0.9
+      });
 
-    const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(geo, mat);
 
-    const radius = 12 + Math.random() * 6;
-    const angle = Math.random() * Math.PI * 2;
-    const baseY = (Math.random() - 0.5) * 6;
+      const radius = 12 + Math.random() * 6;
+      const angle = Math.random() * Math.PI * 2;
+      const baseY = (Math.random() - 0.5) * 6;
 
-    mesh.position.set(
-      Math.cos(angle) * radius,
-      baseY,
-      Math.sin(angle) * radius
-    );
-    scene.add(mesh);
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        baseY,
+        Math.sin(angle) * radius
+      );
+      scene.add(mesh);
 
-    floatingWords.push({
-      mesh,
-      baseY,
-      radius,
-      angle,
-      speed: 0.1 + Math.random() * 0.2,
-      phase: idx * 0.3
-    });
+      floatingWords.push({
+        mesh,
+        baseY,
+        radius,
+        angle,
+        speed: 0.1 + Math.random() * 0.2,
+        phase: idx * 0.3
+      });
+    } catch (err) {
+      console.warn(`Error creando palabra flotante: ${word}`, err);
+    }
   });
 }
 
@@ -681,29 +728,73 @@ function closeModal() {
 
 async function initApp() {
   try {
+    console.log('Iniciando aplicación...');
+    
+    // Verificar que THREE.js esté disponible
+    if (typeof THREE === 'undefined') {
+      throw new Error('Three.js no se cargó correctamente desde el CDN');
+    }
+    console.log('✓ Three.js cargado');
+    
     createDomStars(150);
+    console.log('✓ Estrellas DOM creadas');
+    
     await startLoader();
+    console.log('✓ Loader completado');
 
     // Ocultar pantalla de carga
     const cargando = document.getElementById("cargando");
     if (cargando) cargando.style.display = "none";
 
     await loadThreeResources();
+    console.log(`✓ Recursos cargados (${stickerTextures.length} texturas, fuente: ${font ? 'sí' : 'no'})`);
 
     createScene();
+    console.log('✓ Escena creada');
+    
     createCamera();
+    console.log('✓ Cámara creada');
+    
     createRenderer();
+    console.log('✓ Renderer creado');
+    
     createLights();
+    console.log('✓ Luces creadas');
+    
     createRotatingImage();
+    console.log('✓ Imagen rotatoria creada');
+    
     createRingsAndText();
+    console.log('✓ Anillos y texto creados');
+    
     createFloatingWords();
+    console.log('✓ Palabras flotantes creadas');
+    
     createStarField();
+    console.log('✓ Campo de estrellas creado');
+    
     initUIEvents();
+    console.log('✓ Eventos UI inicializados');
+    
     animate();
+    console.log('✓ Animación iniciada');
+    
+    console.log('🎉 Aplicación completamente inicializada');
   } catch (err) {
-    console.error("Error al inicializar la aplicación:", err);
+    console.error("❌ Error al inicializar la aplicación:", err);
+    console.error("Stack:", err.stack);
     document.body.innerHTML =
-      '<div style="color:red;text-align:center;padding:50px;font-size:24px;">Error al cargar la experiencia. Puedes recargar la página o avisarle a Rodrigo 💙</div>';
+      `<div style="color:#00eeff;text-align:center;padding:50px;font-size:18px;font-family:Arial,sans-serif;">
+        <h2 style="color:#ff6b6b;margin-bottom:20px;">Error al cargar la experiencia 😔</h2>
+        <p style="margin:20px 0;color:#fff;">Por favor, intenta lo siguiente:</p>
+        <ul style="list-style:none;padding:0;margin:20px 0;">
+          <li style="margin:10px 0;">1. Recarga la página (Ctrl + F5)</li>
+          <li style="margin:10px 0;">2. Abre la consola del navegador (F12) para ver detalles</li>
+          <li style="margin:10px 0;">3. Asegúrate de tener conexión a internet</li>
+        </ul>
+        <p style="margin-top:30px;color:#888;font-size:14px;">Error técnico: ${err.message}</p>
+        <button onclick="location.reload()" style="margin-top:20px;padding:10px 20px;background:#00eeff;border:none;border-radius:5px;color:#000;font-size:16px;cursor:pointer;">Recargar Página</button>
+      </div>`;
   }
 }
 
