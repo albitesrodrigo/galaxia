@@ -15,10 +15,10 @@ let lastTextureSwitch = 0;
 let currentTextureIndex = 0;
 
 const IMAGE_URLS = [
-  "https://bcodestorague.anteroteobaldob.workers.dev/share/anteroteobaldob_gmail_com/GIF/gatito.gif",
-  "https://bcodestorague.anteroteobaldob.workers.dev/share/anteroteobaldob_gmail_com/GIF/img.gif",
-  "https://bcodestorague.anteroteobaldob.workers.dev/share/anteroteobaldob_gmail_com/GIF/Gatitosi.gif",
-  "https://bcodestorague.anteroteobaldob.workers.dev/share/anteroteobaldob_gmail_com/GIF/Gatito1.gif"
+  "./assets/gif/gatito.gif",
+  "./assets/gif/img.gif",
+  "./assets/gif/Gatitosi.gif",
+  "./assets/gif/Gatito1.gif"
 ];
 
 const RING_TEXT = "TE AMO CON TODO MI CORAZÓN Y ALMA PARA SIEMPRE MI AMOR ETERNO";
